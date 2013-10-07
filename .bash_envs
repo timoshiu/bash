@@ -1,0 +1,138 @@
+# -*- mode: sh; -*-
+
+function envs() {
+    # usage: envs [.env [.env.rc]]
+    #        environments setter function for /usr/bin/env
+    #        each line of the input file support the following syntax:
+    # file format:
+    #        1. ENV      (query)
+    #        2. LHS=VAL  (set)
+    #        3. LHS=     (unset)
+    #        4. #        (comment)
+
+    file=`envs_get_input $1`
+    file_rc=`envs_get_output ${file} $2`
+
+    file_echo="${file}.echo"
+    file_eval="${file}.eval"
+    file_default="${file}.default"
+
+    envs_make_default ${file} ${file_default}
+    envs_make_eval ${file_default} ${file_eval}
+
+    envs_edit ${file_eval}
+
+    envs_run ${file_eval} ${file_rc}
+    envs_check ${file_rc} ${file_echo}
+}
+
+function envs_get_input() {
+    # envs() helper (.env default)
+    file='.env'
+
+    if [ $# -ge 1 ] ; then
+	file=$1
+    fi
+    
+    if ! [ -e ${file} ] ; then
+	printf "usage: envs [.env [.envrc]] (file not found)\n"
+	return 
+    fi
+
+    printf "${file}\n"
+}
+
+function envs_get_output() {
+    # envs() helper (.env.rc default)
+    file=$1
+    file_rc='${file}.rc'
+
+    if [ $# -ge 1 ] ; then
+	file=$1
+	file_rc="${file}.rc"
+    fi
+    if [ $# -ge 2 ] ; then
+	file_rc=$2
+    fi
+    
+    printf "${file_rc}\n"
+}
+
+function envs_make_default() {
+    # envs() helper (.env.default default)
+    file=$1
+    file_default=$2
+    sed -e "s/^ *\([A-Z_][A-Z_a-z0-9]*\) *$/\1=$\{`eval "echo '\1'"`\}/" \
+	${file} \
+	> ${file_default}
+}
+
+function envs_make_eval() {
+    # envs() helper (.env.eval default)
+    file_default=$1
+    file_eval=$2
+    eval "echo \"`cat ${file_default}`\"" \
+	| sed 's/^ */ /g' \
+	> ${file_eval}
+}
+
+function envs_run() {
+    # envs() helper
+    file_eval=$1
+    file_rc=$2
+    sed -e 's/^ *//g' \
+        -e 's/ /\\ /g' \
+	-e 's/^\([^#][^ =]*\)=\(..*\)$/export \1=\2/g' \
+	-e 's/^\([^#][^ =]*\)=$/unset \1/g' \
+	${file_eval} \
+	> ${file_rc}
+
+    if [ -e ${file_rc} ] ; then
+	source ${file_rc}
+	# rm -f ${file_echo}
+    fi
+}
+
+function envs_check() {
+    # envs() helper
+    file_rc=$1
+    file_echo=$2
+
+    RED=`echo -e '\033[31m'`
+    YELLOW=`echo -e '\033[33m'`
+    MAGENTA=`echo -e '\033[35m'`
+    GREEN=`echo -e '\033[32m'`
+    NORMAL=`echo -e '\033[0m'`
+
+    sed -e 's/^\(#.*\)$/"\1"/g' \
+	-e 's/unset \([^ ]*\).*/\1=\${\1}/g' \
+	-e 's/export \([^ =]*\).*/\1=\${\1}/g' \
+	${file_rc} \
+	| cat -n \
+	| sed -e 's/^/echo /' \
+	> ${file_echo}
+
+    eval "`cat ${file_echo}`" \
+	| sed "s/\(#.*\)/$RED\1$NORMAL/g" \
+	| sed "s/\([^ ]*\)=\(.*\)/$YELLOW\1$NORMAL = \2/g"
+}
+
+function envs_edit() {
+    # envs() helper
+    file_eval=$1
+
+    emacs -Q -nw ${file_eval} \
+	-f sh-mode \
+	-f linum-mode \
+	--eval '(setq make-backup-files nil)' \
+	-f auto-save-mode \
+	--eval '(local-set-key (kbd "TAB") (quote forward-word))'
+#	--eval '(local-set-key (kbd "S-TAB") (quote forward-word))'
+#	--eval '(global-set-key "TAB" (quote forward-word))' 
+#	--eval '(global-set-key (kbd "<s-tab>") (quote backward-word))'
+#	--eval '(global-set-key "\s-\t" (quote backward-word))'
+#	--eval '(global-set-key "\t" (quote forward-word))'
+#	--eval '(global-set-key [tab] (or (key-binding [tab]) (key-binding "\C-i")))'
+#	--eval '(global-set-key (kbdb "S-tab") (quote backward-word))'
+}
+
