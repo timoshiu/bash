@@ -125,6 +125,7 @@ function env_make_value() {
 
     eval "echo \"`cat ${file_query}`\"" \
 	| sed -e "s/ /\\ /g" \
+	| awk -F"[=:]" '{if(0==NF){print $0} if(2==NF){print $0} if(3<=NF){print $1"="$2} for(i=3;i<NF;i++){print $1"+="$i}}' \
 	> ${file_value}
 }
 
@@ -202,6 +203,7 @@ function env_make_export() {
 
     sed -e 's/^ *//g' \
         -e 's/ /\\ /g' \
+	-e 's/^\([^\+=]*\)\+=\(.*\)/export \1=${\1}:\2/g' \
 	-e 's/^\([^#][^ =]*\)=\(..*\)$/export \1=\2/g' \
 	-e 's/^\([^#][^ =]*\)=$/unset \1/g' \
 	${file_value} \
