@@ -11,17 +11,24 @@ function env_manager() {
     local file_print="${file_envs}.print"
     local file_value="${file_envs}.value"
 
-    local flag_edit=`env_get_flag -e $@`
+    local flag_edit_lhs=`env_get_flag -e $@`
+    local flag_edit_rhs=`env_get_flag -v $@`
+    local flag_edit="0"
+    if [ $flag_edit_lhs == "1" -o $flag_edit_rhs == "1" ] ; then
+	flag_edit="1"
+    fi
     if [ $flag_edit == "0" -a -e ${file_print} ] ; then
 	env_print ${file_print}	
 	return
     fi
-	
+
+    env_edit_file ${file_envs} ${flag_edit_lhs}
     env_make_query ${file_envs} ${file_query}
     env_make_value ${file_query} ${file_value}
     env_make_print ${file_query} ${file_print}
     
-    env_edit_value ${file_value} ${file_export}
+    env_edit_file ${file_value} ${flag_edit}
+    env_make_export ${file_value} ${file_export}
     env_export ${file_export}
     env_print ${file_print}
 }
@@ -117,7 +124,7 @@ function env_make_value() {
     fi
 
     eval "echo \"`cat ${file_query}`\"" \
-	| sed 's/^ */ /g' \
+	| sed -e "s/ /\\ /g" \
 	> ${file_value}
 }
 
@@ -130,10 +137,9 @@ function env_make_print() {
 	return
     fi
 
-    sed -e 's/^\(#.*\)$/"\1"/g' \
-	${file_query} \
-	| cat -n \
-	| sed -e 's/^/echo /' \
+    cat -n ${file_query} \
+	| sed -e 's/^[[:space:]]*\([0-9]*\)[[:space:]]*\([^\ =]*\)=\(.*\)$/printf "%2d \2=\3\\n" \1/g' \
+	| sed -e 's/^[[:space:]]*\([0-9]*\)[[:space:]]*$/printf "%2d \\n" \1/g' \
 	> ${file_print}
 }
 
@@ -168,12 +174,12 @@ function env_export() {
     source ${file_export}
 }
 
-function env_edit_value() {
+function env_edit_file() {
     # env_manager() helper
     local file_value=$1
-    local file_export=$2
+    local edit=$2
 
-    if [ ! -e ${file_value} ] ; then
+    if [ ! -e ${file_value} -o "$edit" == "0" ] ; then
 	return
     fi
 
@@ -181,8 +187,18 @@ function env_edit_value() {
 	-f sh-mode \
 	-f linum-mode \
 	--eval '(setq make-backup-files nil)' \
+	--eval '(setq linum-format "%2d ")' \
 	-f auto-save-mode \
 	--eval '(local-set-key (kbd "TAB") (quote forward-word))'
+}
+
+function env_make_export() {
+    local file_value=$1
+    local file_export=$2
+
+    if [ ! -e ${file_value} ] ; then
+	return
+    fi
 
     sed -e 's/^ *//g' \
         -e 's/ /\\ /g' \
