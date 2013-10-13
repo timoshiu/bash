@@ -1,138 +1,211 @@
 # -*- mode: sh; -*-
 
-function envs() {
-    # usage: envs [.env [.env.rc]]
-    #        environments setter function for /usr/bin/env
-    #        each line of the input file support the following syntax:
-    # file format:
-    #        1. ENV      (query)
-    #        2. LHS=VAL  (set)
-    #        3. LHS=     (unset)
-    #        4. #        (comment)
+alias env='env_manager $@' # note: use "\env" to call bash's env
 
-    file=`envs_get_input $1`
-    file_rc=`envs_get_output ${file} $2`
+function env_manager() {
+    # see env_help() for doc
 
-    file_echo="${file}.echo"
-    file_eval="${file}.eval"
-    file_default="${file}.default"
+    local file_envs=`env_get_input $@`
+    local file_export=`env_get_output ${file_envs}`
+    local file_query="${file_envs}.query"
+    local file_print="${file_envs}.print"
+    local file_value="${file_envs}.value"
 
-    envs_make_default ${file} ${file_default}
-    envs_make_eval ${file_default} ${file_eval}
-
-    envs_edit ${file_eval}
-
-    envs_run ${file_eval} ${file_rc}
-    envs_check ${file_rc} ${file_echo}
+    local flag_edit=`env_get_flag -e $@`
+    if [ $flag_edit == "0" -a -e ${file_print} ] ; then
+	env_print ${file_print}	
+	return
+    fi
+	
+    env_make_query ${file_envs} ${file_query}
+    env_make_value ${file_query} ${file_value}
+    env_make_print ${file_query} ${file_print}
+    
+    env_edit_value ${file_value} ${file_export}
+    env_export ${file_export}
+    env_print ${file_print}
 }
 
-function envs_get_input() {
-    # envs() helper (.env default)
-    file='.env'
+function env_get_flag() {
+    # env_manager() helper
+    local flag="$1"
+    shift
+    local args="$*"
+    for arg in ${args} ; do
+	case ${arg} in
+	    $flag) 
+		printf "1\n"
+		return
+		;;
+	    *) 
+		# echo ${arg}
+		;;
+	esac
+    done
+
+    printf "0\n"
+}
+
+function env_get_file() {
+    # env_manager() helper
+    local args="$*"
+    for arg in ${args} ; do
+	case ${arg} in
+	    -*) 
+		# echo ${arg}
+		;;
+	    *) 
+		printf "$arg\n"
+		return
+		;;
+	esac
+    done
+    printf ".env\n"
+}
+
+function env_get_input() {
+    # env_manager() helper (.env default)
+
+    local file_envs=`env_get_file $@`
+    
+    if [ ! -e ${file_envs} -a -e ~/${file_envs} ] ; then
+	cp -f ~/${file_envs} ${file_envs}
+    fi
+
+    if [ ! -e ${file_envs} ] ; then
+	echo "cannot find file" ${file_envs}
+	return
+    fi
+
+    printf "${file_envs}\n"
+}
+
+function env_get_output() {
+    # env_manager() helper (.env.export default)
+    local file_envs=""
+    local file_export=""
 
     if [ $# -ge 1 ] ; then
-	file=$1
-    fi
-    
-    if ! [ -e ${file} ] ; then
-	printf "usage: envs [.env [.envrc]] (file not found)\n"
-	return 
+	file_envs=$1
+	file_export="${file_envs}.export"
     fi
 
-    printf "${file}\n"
+    printf "${file_export}\n"
 }
 
-function envs_get_output() {
-    # envs() helper (.env.rc default)
-    file=$1
-    file_rc='${file}.rc'
+function env_make_query() {
+    # env_manager() helper (.env.query default)
+    local file_envs=$1
+    local file_query=$2
 
-    if [ $# -ge 1 ] ; then
-	file=$1
-	file_rc="${file}.rc"
+    if [ ! -e ${file_envs} ] ; then
+	return
     fi
-    if [ $# -ge 2 ] ; then
-	file_rc=$2
-    fi
-    
-    printf "${file_rc}\n"
-}
 
-function envs_make_default() {
-    # envs() helper (.env.default default)
-    file=$1
-    file_default=$2
     sed -e "s/^ *\([A-Z_][A-Z_a-z0-9]*\) *$/\1=$\{`eval "echo '\1'"`\}/" \
-	${file} \
-	> ${file_default}
+	${file_envs} \
+	> ${file_query}
 }
 
-function envs_make_eval() {
-    # envs() helper (.env.eval default)
-    file_default=$1
-    file_eval=$2
-    eval "echo \"`cat ${file_default}`\"" \
-	| sed 's/^ */ /g' \
-	> ${file_eval}
-}
+function env_make_value() {
+    # env_manager() helper (.env.value default)
+    local file_query=$1
+    local file_value=$2
 
-function envs_run() {
-    # envs() helper
-    file_eval=$1
-    file_rc=$2
-    sed -e 's/^ *//g' \
-        -e 's/ /\\ /g' \
-	-e 's/^\([^#][^ =]*\)=\(..*\)$/export \1=\2/g' \
-	-e 's/^\([^#][^ =]*\)=$/unset \1/g' \
-	${file_eval} \
-	> ${file_rc}
-
-    if [ -e ${file_rc} ] ; then
-	source ${file_rc}
-	# rm -f ${file_echo}
+    if [ ! -e ${file_query} ] ; then
+	return
     fi
+
+    eval "echo \"`cat ${file_query}`\"" \
+	| sed 's/^ */ /g' \
+	> ${file_value}
 }
 
-function envs_check() {
-    # envs() helper
-    file_rc=$1
-    file_echo=$2
+function env_make_print() {
+    # env_manager() helper (.env.print default)
+    local file_query=$1
+    local file_print=$2
 
-    RED=`echo -e '\033[31m'`
-    YELLOW=`echo -e '\033[33m'`
-    MAGENTA=`echo -e '\033[35m'`
-    GREEN=`echo -e '\033[32m'`
-    NORMAL=`echo -e '\033[0m'`
+    if [ ! -e ${file_query} ] ; then
+	return
+    fi
 
     sed -e 's/^\(#.*\)$/"\1"/g' \
-	-e 's/unset \([^ ]*\).*/\1=\${\1}/g' \
-	-e 's/export \([^ =]*\).*/\1=\${\1}/g' \
-	${file_rc} \
+	${file_query} \
 	| cat -n \
 	| sed -e 's/^/echo /' \
-	> ${file_echo}
+	> ${file_print}
+}
 
-    eval "`cat ${file_echo}`" \
+function env_print() {
+    # env_manager() helper
+    local file_print=$1
+
+    if [ ! -e ${file_print} ] ; then
+	echo "error: file not found, " ${file_print}
+	return
+    fi
+
+    local RED=`echo -e '\033[31m'`
+    local YELLOW=`echo -e '\033[33m'`
+    local MAGENTA=`echo -e '\033[35m'`
+    local GREEN=`echo -e '\033[32m'`
+    local NORMAL=`echo -e '\033[0m'`
+
+    eval "`cat ${file_print}`" \
 	| sed "s/\(#.*\)/$RED\1$NORMAL/g" \
 	| sed "s/\([^ ]*\)=\(.*\)/$YELLOW\1$NORMAL = \2/g"
 }
 
-function envs_edit() {
-    # envs() helper
-    file_eval=$1
+function env_export() {
+    # env_manager() helper
+    local file_export=$1
 
-    emacs -Q -nw ${file_eval} \
+    if [ ! -e ${file_export} ] ; then
+	return
+    fi
+
+    source ${file_export}
+}
+
+function env_edit_value() {
+    # env_manager() helper
+    local file_value=$1
+    local file_export=$2
+
+    if [ ! -e ${file_value} ] ; then
+	return
+    fi
+
+    emacs -Q -nw ${file_value} \
 	-f sh-mode \
 	-f linum-mode \
 	--eval '(setq make-backup-files nil)' \
 	-f auto-save-mode \
 	--eval '(local-set-key (kbd "TAB") (quote forward-word))'
-#	--eval '(local-set-key (kbd "S-TAB") (quote forward-word))'
-#	--eval '(global-set-key "TAB" (quote forward-word))' 
-#	--eval '(global-set-key (kbd "<s-tab>") (quote backward-word))'
-#	--eval '(global-set-key "\s-\t" (quote backward-word))'
-#	--eval '(global-set-key "\t" (quote forward-word))'
-#	--eval '(global-set-key [tab] (or (key-binding [tab]) (key-binding "\C-i")))'
-#	--eval '(global-set-key (kbdb "S-tab") (quote backward-word))'
+
+    sed -e 's/^ *//g' \
+        -e 's/ /\\ /g' \
+	-e 's/^\([^#][^ =]*\)=\(..*\)$/export \1=\2/g' \
+	-e 's/^\([^#][^ =]*\)=$/unset \1/g' \
+	${file_value} \
+	> ${file_export}
 }
 
+function env_help() {
+    # env_manager() helper
+    echo "usage: env [-p|-e] [envfile]"
+    echo "        environments setter function for /usr/bin/env"
+    echo "        each line of the input file support the following syntax:"
+    echo ""
+    echo " flags:"
+    echo "        -p          print current envfile (default)"
+    echo "        -e          edit current envfile"
+    echo "        envfile     the filename, see below for \"format\" (.env default)"
+    echo ""
+    echo " format: (inside envfile)"
+    echo "        1. ENV      (query)"
+    echo "        2. LHS=VAL  (set)"
+    echo "        3. LHS=     (unset)"
+    # echo "        4. #        (comment)"
+}
