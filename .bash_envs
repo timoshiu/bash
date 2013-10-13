@@ -41,7 +41,7 @@ function env_get_flag() {
     # env_manager() helper
     local flag="$1"
     shift
-    local args="$*"
+    local args="$@"
     for arg in ${args} ; do
 	case ${arg} in
 	    $flag) 
@@ -59,7 +59,7 @@ function env_get_flag() {
 
 function env_get_file() {
     # env_manager() helper
-    local args="$*"
+    local args="$@"
     for arg in ${args} ; do
 	case ${arg} in
 	    -*) 
@@ -80,12 +80,7 @@ function env_get_input() {
     local file_envs=`env_get_file $@`
     
     if [ ! -e ${file_envs} -a -e ~/${file_envs} ] ; then
-	cp -f ~/${file_envs} ${file_envs}
-    fi
-
-    if [ ! -e ${file_envs} ] ; then
-	echo "cannot find file" ${file_envs}
-	return
+	cp -f ~/${file_envs} ./${file_envs}
     fi
 
     printf "${file_envs}\n"
@@ -93,13 +88,8 @@ function env_get_input() {
 
 function env_get_output() {
     # env_manager() helper (.env.export default)
-    local file_envs=""
-    local file_export=""
-
-    if [ $# -ge 1 ] ; then
-	file_envs=$1
-	file_export="${file_envs}.export"
-    fi
+    local file_envs=$1
+    local file_export="${file_envs}.export"
 
     printf "${file_export}\n"
 }
@@ -163,6 +153,7 @@ function env_make_print() {
     if [ ! -e ${file_envs} ] ; then
 	return
     fi
+
     cat -n ${file_envs} \
 	| sed -e 's/^[[:space:]]*\([0-9][0-9]*\)[[:space:]][[:space:]]*\([^=[:space:]][^=[:space:]]*\)=.*$/printf "%02d \2=${\2}\\n" \1/g' \
 	      -e 's/^[[:space:]]*\([0-9][0-9]*\)[[:space:]][[:space:]]*\([^=[:space:]][^=[:space:]]*\)$/printf "%02d \2=${\2}\\n" \1/g' \
@@ -175,7 +166,7 @@ function env_print() {
     local file_print=$1
 
     if [ ! -e ${file_print} ] ; then
-	echo "error: file not found, " ${file_print}
+	echo "file not found, ${file_print}"
 	return
     fi
 
