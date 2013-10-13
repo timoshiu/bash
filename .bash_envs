@@ -129,7 +129,7 @@ function env_make_value() {
 
     eval "echo \"`cat ${file_query}`\"" \
 	| sed -e "s/ /\\ /g" \
-	| awk -F"[=:]" '{if(0==NF){print $0} if(2==NF){print $0} if(3<=NF){print $1"="$2} for(i=3;i<=NF;i++){print $1"+="$i}}' \
+	| awk -F"[=:]" '{if(NF<=2){print $0} if(3<=NF) {print $1"="$2} for(i=3;3<NF&&i<=NF;i++){print $1"=${"$1"}:"$i}}' \
 	> ${file_value}
 }
 
@@ -142,9 +142,9 @@ function env_make_print() {
 	return
     fi
     cat -n ${file_envs} \
-	| sed -e 's/^[[:space:]]*\([0-9][0-9]*\)[[:space:]][[:space:]]*\([^=[:space:]][^=[:space:]]*\)=.*$/printf "%2d \2=${\2}\\n" \1/g' \
-	      -e 's/^[[:space:]]*\([0-9][0-9]*\)[[:space:]][[:space:]]*\([^=[:space:]][^=[:space:]]*\)$/printf "%2d \2=${\2}\\n" \1/g' \
-	      -e 's/^[[:space:]]*\([0-9][0-9]*\)[[:space:]]*$/printf "%2d \\n" \1/g' \
+	| sed -e 's/^[[:space:]]*\([0-9][0-9]*\)[[:space:]][[:space:]]*\([^=[:space:]][^=[:space:]]*\)=.*$/printf "%02d \2=${\2}\\n" \1/g' \
+	      -e 's/^[[:space:]]*\([0-9][0-9]*\)[[:space:]][[:space:]]*\([^=[:space:]][^=[:space:]]*\)$/printf "%02d \2=${\2}\\n" \1/g' \
+	      -e 's/^[[:space:]]*\([0-9][0-9]*\)[[:space:]]*$/printf "%02d\\n" \1/g' \
 	> ${file_print}
 }
 
@@ -163,7 +163,8 @@ function env_print() {
     local GREEN=`echo -e '\033[32m'`
     local NORMAL=`echo -e '\033[0m'`
 
-    eval "`cat ${file_print}`" \
+    source ${file_print} \
+	| awk -F"[ =:]" '{if(NF<=3){print $0} if(4<=NF){print $1" "$2"="$3} for(i=4;4<NF&&i<=NF;i++){print $1" "$2"=${"$2"}:"$i}}' \
 	| sed "s/\(#.*\)/$RED\1$NORMAL/g" \
 	| sed "s/\([^ ]*\)=\(.*\)/$YELLOW\1$NORMAL = \2/g"
 }
@@ -192,7 +193,7 @@ function env_edit_file() {
 	-f sh-mode \
 	-f linum-mode \
 	--eval '(setq make-backup-files nil)' \
-	--eval '(setq linum-format "%2d ")' \
+	--eval '(setq linum-format "%02d ")' \
 	-f auto-save-mode \
 	--eval '(local-set-key (kbd "TAB") (quote forward-word))'
 }
