@@ -20,7 +20,7 @@ function env_manager() {
     if [ $flag_edit == "0" -a -e ${file_envs} ] ; then
 	env_make_print ${file_envs} ${file_print}
 	env_print ${file_print}	
-	rm -f ${file_print}
+	# rm -f ${file_print}
 	return
     fi
 
@@ -34,7 +34,7 @@ function env_manager() {
     env_export ${file_export}
     env_print ${file_print}
 
-    rm -f ${file_query} ${file_value} ${file_export} ${file_print}
+    # rm -f ${file_query} ${file_value} ${file_export} ${file_print}
 }
 
 function env_get_flag() {
@@ -104,6 +104,29 @@ function env_get_output() {
     printf "${file_export}\n"
 }
 
+function env_split_lines() {
+    # env_manager() helper
+    while read data; do
+	env_split_line $data
+    done
+}
+
+function env_split_line() {
+    # env_manager() helper
+    local lhs=`echo $@ | sed -n 's/^\([^=]*\)=.*/\1/p'` 
+    local rhs=`echo $@ | sed -n 's/^[^=]*=\([^:]*\).*/\1/p'`
+    local arg=`echo $@ | sed -n 's/^\([^=]*=[^:]*\):\(.*\)/\2:/p' | sed -e 's/ /\+/g'`
+    if [ "${lhs}=${rhs}" == "=" ] ; then
+	printf "$@\n"
+	return
+    fi
+    printf "${lhs}=`echo ${rhs}| sed -e 's/\ /\\\ /g'`\n" 
+
+    for item in ${arg//:/ }; do
+	printf "${lhs}=\${`echo ${lhs}|sed -e 's/.*[[:space:]][[:space:]]*\([^[:space:]]*\)[[:space:]]*/\1/g'`}:`echo ${item}|sed -e 's/\+/\\\ /g'`\n"
+    done
+}
+
 function env_make_query() {
     # env_manager() helper (.env.query default)
     local file_envs=$1
@@ -128,8 +151,7 @@ function env_make_value() {
     fi
 
     eval "echo \"`cat ${file_query}`\"" \
-	| sed -e "s/ /\\ /g" \
-	| awk -F"[=:]" '{if(NF<=2){print $0} if(3<=NF) {print $1"="$2} for(i=3;3<NF&&i<=NF;i++){print $1"=${"$1"}:"$i}}' \
+	| env_split_lines \
 	> ${file_value}
 }
 
@@ -164,9 +186,9 @@ function env_print() {
     local NORMAL=`echo -e '\033[0m'`
 
     source ${file_print} \
-	| awk -F"[ =:]" '{if(NF<=3){print $0} if(4<=NF){print $1" "$2"="$3} for(i=4;4<NF&&i<=NF;i++){print $1" "$2"=${"$2"}:"$i}}' \
+	| env_split_lines \
 	| sed "s/\(#.*\)/$RED\1$NORMAL/g" \
-	| sed "s/\([^ ]*\)=\(.*\)/$YELLOW\1$NORMAL = \2/g"
+	| sed "s/\([^ ]*\)=\(.*\)/$YELLOW\1$NORMAL=\2/g"
 }
 
 function env_export() {
@@ -207,7 +229,6 @@ function env_make_export() {
     fi
 
     sed -e 's/^ *//g' \
-        -e 's/ /\\ /g' \
 	-e 's/^\([^\+=]*\)\+=\(.*\)/export \1=${\1}:\2/g' \
 	-e 's/^\([^#][^ =]*\)=\(..*\)$/export \1=\2/g' \
 	-e 's/^\([^#][^ =]*\)=$/unset \1/g' \
