@@ -11,26 +11,30 @@ function env_manager() {
     local file_print="${file_envs}.print"
     local file_value="${file_envs}.value"
 
-    local flag_edit_lhs=`env_get_flag -e $@`
-    local flag_edit_rhs=`env_get_flag -v $@`
+    local flag_edit_lhs=`env_get_flag -E $@`
+    local flag_edit_rhs=`env_get_flag -e $@`
     local flag_edit="0"
     if [ $flag_edit_lhs == "1" -o $flag_edit_rhs == "1" ] ; then
 	flag_edit="1"
     fi
-    if [ $flag_edit == "0" -a -e ${file_print} ] ; then
+    if [ $flag_edit == "0" -a -e ${file_envs} ] ; then
+	env_make_print ${file_envs} ${file_print}
 	env_print ${file_print}	
+	rm -f ${file_print}
 	return
     fi
 
     env_edit_file ${file_envs} ${flag_edit_lhs}
+    env_make_print ${file_envs} ${file_print}
     env_make_query ${file_envs} ${file_query}
     env_make_value ${file_query} ${file_value}
-    env_make_print ${file_query} ${file_print}
     
     env_edit_file ${file_value} ${flag_edit}
     env_make_export ${file_value} ${file_export}
     env_export ${file_export}
     env_print ${file_print}
+
+    rm -f ${file_query} ${file_value} ${file_export} ${file_print}
 }
 
 function env_get_flag() {
@@ -109,7 +113,7 @@ function env_make_query() {
 	return
     fi
 
-    sed -e "s/^ *\([A-Z_][A-Z_a-z0-9]*\) *$/\1=$\{`eval "echo '\1'"`\}/" \
+    sed -e "s/^[ \t]*\([A-Z_][A-Z_a-z0-9]*\)[ \t]*$/\1=$\{`eval "echo '\1'"`\}/" \
 	${file_envs} \
 	> ${file_query}
 }
@@ -125,22 +129,22 @@ function env_make_value() {
 
     eval "echo \"`cat ${file_query}`\"" \
 	| sed -e "s/ /\\ /g" \
-	| awk -F"[=:]" '{if(0==NF){print $0} if(2==NF){print $0} if(3<=NF){print $1"="$2} for(i=3;i<NF;i++){print $1"+="$i}}' \
+	| awk -F"[=:]" '{if(0==NF){print $0} if(2==NF){print $0} if(3<=NF){print $1"="$2} for(i=3;i<=NF;i++){print $1"+="$i}}' \
 	> ${file_value}
 }
 
 function env_make_print() {
     # env_manager() helper (.env.print default)
-    local file_query=$1
+    local file_envs=$1
     local file_print=$2
 
-    if [ ! -e ${file_query} ] ; then
+    if [ ! -e ${file_envs} ] ; then
 	return
     fi
-
-    cat -n ${file_query} \
-	| sed -e 's/^[[:space:]]*\([0-9]*\)[[:space:]]*\([^\ =]*\)=\(.*\)$/printf "%2d \2=\3\\n" \1/g' \
-	| sed -e 's/^[[:space:]]*\([0-9]*\)[[:space:]]*$/printf "%2d \\n" \1/g' \
+    cat -n ${file_envs} \
+	| sed -e 's/^[[:space:]]*\([0-9][0-9]*\)[[:space:]][[:space:]]*\([^=[:space:]][^=[:space:]]*\)=.*$/printf "%2d \2=${\2}\\n" \1/g' \
+	      -e 's/^[[:space:]]*\([0-9][0-9]*\)[[:space:]][[:space:]]*\([^=[:space:]][^=[:space:]]*\)$/printf "%2d \2=${\2}\\n" \1/g' \
+	      -e 's/^[[:space:]]*\([0-9][0-9]*\)[[:space:]]*$/printf "%2d \\n" \1/g' \
 	> ${file_print}
 }
 
@@ -212,18 +216,18 @@ function env_make_export() {
 
 function env_help() {
     # env_manager() helper
-    echo "usage: env [-p|-e] [envfile]"
+    echo "usage: env [-e|-E] [env_val_file]"
     echo "        environments setter function for /usr/bin/env"
     echo "        each line of the input file support the following syntax:"
     echo ""
     echo " flags:"
-    echo "        -p          print current envfile (default)"
-    echo "        -e          edit current envfile"
-    echo "        envfile     the filename, see below for \"format\" (.env default)"
+    echo "        -e           edit env_file environment values"
+    echo "        -E           edit env_file environment variables"
+    echo "        env_val_file specify env_file filename, (.env default)"
     echo ""
-    echo " format: (inside envfile)"
-    echo "        1. ENV      (query)"
-    echo "        2. LHS=VAL  (set)"
-    echo "        3. LHS=     (unset)"
-    # echo "        4. #        (comment)"
+    echo " format: (inside env_val_file)"
+    echo "        1. ENV      (use exist ENV value)"
+    echo "        2. ENV=env  (set ENV to value env)"
+    echo "        3. ENV=     (unset ENV)"
+    echo "        4. #        (comment)"
 }
