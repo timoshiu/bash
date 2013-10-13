@@ -229,16 +229,17 @@ function env_make_export() {
 
 function env_help() {
     # env_manager() helper
-    echo "usage: env [-e|-E] [env_val_file]"
+    echo "Usage: env [-h|-e|-E] [env_val_file]"
     echo "        environments setter function for /usr/bin/env"
     echo "        each line of the input file support the following syntax:"
     echo ""
-    echo " flags:"
+    echo "Flags:"
+    echo "        -h           print this help message"
     echo "        -e           edit env_file environment values"
     echo "        -E           edit env_file environment variables"
     echo "        env_val_file specify env_file filename, (.env default)"
     echo ""
-    echo " format: (inside env_val_file)"
+    echo "Format: (inside env_val_file)"
     echo "        1. ENV      (use exist ENV value)"
     echo "        2. ENV=env  (set ENV to value env)"
     echo "        3. ENV=     (unset ENV)"
